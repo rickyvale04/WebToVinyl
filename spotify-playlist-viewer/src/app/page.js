@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 export default function Home() {
+  console.log('Home component rendering on client');
   const [playlistUrl, setPlaylistUrl] = useState('');
   const [tracks, setTracks] = useState(null);
   const [error, setError] = useState(null);
@@ -116,6 +117,7 @@ export default function Home() {
             </p>
             <p className="text-gray-500 text-sm">CSV, TXT</p>
           </div>
+          <div className="text-red-500">TEST CLIENT RENDER</div>
         </div>
       </main>
     </div>
