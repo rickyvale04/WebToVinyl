@@ -67,13 +67,15 @@ export default function Home() {
             onChange={(e) => setPlaylistUrl(e.target.value)}
           />
 
-          <button
-            onClick={handleImport}
-            disabled={isLoading}
-            className="w-full bg-green-600 text-white px-6 py-3 rounded-md text-lg font-bold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed mb-6"
-          >
-            {isLoading ? 'Importing...' : 'Import from URL'}
-          </button>
+          {playlistUrl && (
+            <button
+              onClick={handleImport}
+              disabled={isLoading}
+              className="w-full bg-green-600 text-white px-6 py-3 rounded-md text-lg font-bold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed mb-6"
+            >
+              {isLoading ? 'Importing...' : 'Import from URL'}
+            </button>
+          )}
 
           {error && (
             <p className="text-red-500 mb-4">{error}</p>
