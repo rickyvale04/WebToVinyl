@@ -1,4 +1,43 @@
+'use client';
+
+import { useState } from 'react';
+
 export default function Home() {
+  const [playlistUrl, setPlaylistUrl] = useState('');
+  const [tracks, setTracks] = useState(null);
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleImport = async () => {
+    setIsLoading(true);
+    setError(null);
+    setTracks(null);
+
+    try {
+      const response = await fetch('/api/playlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ playlistUrl }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'An unknown error occurred');
+        return;
+      }
+
+      setTracks(data.tracks);
+    } catch (err) {
+      console.error('Frontend API call error:', err);
+      setError('Failed to connect to the server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center">
       {/* Header */}
@@ -22,7 +61,42 @@ export default function Home() {
             type="text"
             placeholder="Paste your Spotify/SoundCloud URL here"
             className="w-full p-4 mb-6 bg-gray-800 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+            value={playlistUrl}
+            onChange={(e) => setPlaylistUrl(e.target.value)}
           />
+
+          {playlistUrl && (
+            <button
+              onClick={handleImport}
+              disabled={isLoading}
+              className="w-full bg-green-600 text-white px-6 py-3 rounded-md text-lg font-bold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed mb-6"
+            >
+              {isLoading ? 'Importing...' : 'Import from URL'}
+            </button>
+          )}
+
+          {error && (
+            <p className="text-red-500 mb-4">{error}</p>
+          )}
+
+          {tracks && tracks.length > 0 && (
+            <div className="mt-8 text-left">
+              <h2 className="text-2xl font-bold mb-4">Imported Tracks:</h2>
+              <ul className="space-y-2">
+                {tracks.map((track, index) => (
+                  <li key={index} className="flex items-center space-x-4">
+                    {track.albumCover && (
+                      <img src={track.albumCover} alt="Album Cover" className="w-12 h-12 rounded-md" />
+                    )}
+                    <div>
+                      <p className="font-semibold">{track.name}</p>
+                      <p className="text-gray-400 text-sm">{track.artists}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="border-2 border-dashed border-gray-600 rounded-md p-12 text-center flex flex-col items-center justify-center">
             <svg
