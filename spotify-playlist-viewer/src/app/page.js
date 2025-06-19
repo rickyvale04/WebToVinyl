@@ -1,43 +1,116 @@
 'use client';
 
-'use client';
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function Home() {
-  const [playlistUrl, setPlaylistUrl] = useState('');
-  const [tracks, setTracks] = useState(null);
+  const [accessToken, setAccessToken] = useState(null);
+  const [refreshToken, setRefreshToken] = useState(null);
+  const [playlists, setPlaylists] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleImport = async () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const storedAccessToken = localStorage.getItem('spotify_access_token');
+    const storedRefreshToken = localStorage.getItem('spotify_refresh_token');
+
+    if (storedAccessToken && storedRefreshToken) {
+      setAccessToken(storedAccessToken);
+      setRefreshToken(storedRefreshToken);
+      fetchPlaylists(storedAccessToken);
+    } else {
+      const code = searchParams.get('code');
+      if (code) {
+        exchangeCodeForTokens(code);
+      }
+    }
+  }, [searchParams]);
+
+  const exchangeCodeForTokens = async (code) => {
     setIsLoading(true);
     setError(null);
-    setTracks(null);
-
     try {
-      const response = await fetch('/api/playlist', {
+      const response = await fetch('/api/callback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ playlistUrl }),
+        body: JSON.stringify({ code }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'An unknown error occurred');
+        setError(data.error || 'Failed to exchange code for tokens');
+        setIsLoading(false);
         return;
       }
 
-      setTracks(data.tracks);
+      localStorage.setItem('spotify_access_token', data.access_token);
+      localStorage.setItem('spotify_refresh_token', data.refresh_token);
+      setAccessToken(data.access_token);
+      setRefreshToken(data.refresh_token);
+      fetchPlaylists(data.access_token);
     } catch (err) {
-      console.error('Frontend API call error:', err);
-      setError('Failed to connect to the server.');
+      console.error('Token exchange error:', err);
+      setError('Failed to connect to the server for token exchange.');
+    } finally {
+      setIsLoading(false);
+      // Clear code from URL
+      router.replace('/', undefined, { shallow: true });
+    }
+  };
+
+  const fetchPlaylists = async (token) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/playlists', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Failed to fetch playlists');
+        return;
+      }
+
+      setPlaylists(data.playlists);
+    } catch (err) {
+      console.error('Fetch playlists error:', err);
+      setError('Failed to connect to the server for playlists.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLogin = () => {
+    const clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID;
+    const redirectUri = process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI;
+    const scope = 'playlist-read-private playlist-read-collaborative';
+
+    if (!clientId || !redirectUri) {
+      setError('Spotify client ID or redirect URI not configured.');
+      return;
+    }
+
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`;
+    window.location.href = authUrl;
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('spotify_access_token');
+    localStorage.removeItem('spotify_refresh_token');
+    setAccessToken(null);
+    setRefreshToken(null);
+    setPlaylists(null);
+    setError(null);
   };
 
   return (
@@ -57,50 +130,49 @@ export default function Home() {
           TRANSFORM YOUR DIGITAL PLAYLISTS INTO VINYL TREASURES
         </p>
 
-        {/* Input and Drag & Drop Area */}
         <div className="w-full max-w-2xl bg-gray-900 p-8 rounded-lg shadow-lg border border-gray-700">
-          <input
-            type="text"
-            placeholder="Paste your Spotify/SoundCloud URL here"
-            className="w-full p-4 mb-6 bg-gray-800 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
-            value={playlistUrl}
-            onChange={(e) => setPlaylistUrl(e.target.value)}
-          />
-
-          {playlistUrl && (
+          {!accessToken ? (
             <button
-              onClick={handleImport}
-              disabled={isLoading}
-              className="w-full bg-green-600 text-white px-6 py-3 rounded-md text-lg font-bold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed mb-6"
+              onClick={handleLogin}
+              className="w-full bg-green-600 text-white px-6 py-3 rounded-md text-lg font-bold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 mb-6"
             >
-              {isLoading ? 'Importing...' : 'Import from URL'}
+              Login with Spotify
             </button>
+          ) : (
+            <>
+              <button
+                onClick={handleLogout}
+                className="w-full bg-red-600 text-white px-6 py-3 rounded-md text-lg font-bold hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 mb-6"
+              >
+                Logout from Spotify
+              </button>
+
+              {isLoading && <p className="text-gray-400">Loading playlists...</p>}
+              {error && <p className="text-red-500 mb-4">{error}</p>}
+
+              {playlists && playlists.length > 0 && (
+                <div className="mt-8 text-left">
+                  <h2 className="text-2xl font-bold mb-4">Your Playlists:</h2>
+                  <ul className="space-y-2">
+                    {playlists.map((playlist) => (
+                      <li key={playlist.id} className="flex items-center space-x-4">
+                        {playlist.images && playlist.images.length > 0 && (
+                          <img src={playlist.images[0].url} alt="Playlist Cover" className="w-12 h-12 rounded-md" />
+                        )}
+                        <div>
+                          <p className="font-semibold">{playlist.name}</p>
+                          <p className="text-gray-400 text-sm">{playlist.tracks.total} tracks</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
           )}
 
-          {error && (
-            <p className="text-red-500 mb-4">{error}</p>
-          )}
-
-          {tracks && tracks.length > 0 && (
-            <div className="mt-8 text-left">
-              <h2 className="text-2xl font-bold mb-4">Imported Tracks:</h2>
-              <ul className="space-y-2">
-                {tracks.map((track, index) => (
-                  <li key={index} className="flex items-center space-x-4">
-                    {track.albumCover && (
-                      <img src={track.albumCover} alt="Album Cover" className="w-12 h-12 rounded-md" />
-                    )}
-                    <div>
-                      <p className="font-semibold">{track.name}</p>
-                      <p className="text-gray-400 text-sm">{track.artists}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="border-2 border-dashed border-gray-600 rounded-md p-12 text-center flex flex-col items-center justify-center">
+          {/* Original Drag & Drop Area - kept for now, can be removed later if not needed */}
+          <div className="border-2 border-dashed border-gray-600 rounded-md p-12 text-center flex flex-col items-center justify-center mt-6">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
